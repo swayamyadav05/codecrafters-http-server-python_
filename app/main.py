@@ -11,11 +11,11 @@ def main():
             client.close()
             return
 
-        parts = data.split('\r\n\r\n', 1)
+        parts = data.split("\r\n\r\n", 1)
         headers_part = parts[0]
-        body = parts[1] if len(parts) > 1 else ''
+        body = parts[1] if len(parts) > 1 else ""
 
-        headers = headers_part.split('\r\n')
+        headers = headers_part.split("\r\n")
         if not headers:
             client.send(b"HTTP/1.1 400 Bad Request\r\n\r\n")
             client.close()
@@ -30,22 +30,38 @@ def main():
         method, path, _ = request_line
         headers_dict = {}
         for header in headers[1:]:
-            if ': ' in header:
-                key, value = header.split(': ', 1)
+            if ": " in header:
+                key, value = header.split(": ", 1)
                 headers_dict[key.lower()] = value
 
         response = b""
         if path == "/":
             response = b"HTTP/1.1 200 OK\r\n\r\n"
         elif path.startswith("/echo/"):
-            content = path[len("/echo/"):]
-            response = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(content)}\r\n\r\n{content}".encode()
+            content = path[len("/echo/") :]
+            accept_encoding = headers_dict.get("accept-encoding", "")
+            supported_encodings = [
+                enc.strip().lower() for enc in accept_encoding.split(",")
+            ]
+            content_encoding = (
+                "Content-Encoding: gzip" if "gzip" in supported_encodings else None
+            )
+
+            headers_list = [
+                "HTTP/1.1 200 OK",
+                "Content-Type: text/plain",
+            ]
+            if content_encoding:
+                headers_list.append(content_encoding)
+            headers_list.append(f"Content-Length: {len(content)}")
+            header_str = "\r\n".join(headers_list)
+            response = f"{header_str}\r\n\r\n{content}".encode()
         elif path == "/user-agent":
-            user_agent = headers_dict.get('user-agent', '')
+            user_agent = headers_dict.get("user-agent", "")
             response = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(user_agent)}\r\n\r\n{user_agent}".encode()
         elif method == "GET" and path.startswith("/files/"):
-            directory = sys.argv[2]
-            filename = path[len("/files/"):]
+            directory = sys.argv[2] if len(sys.argv) > 2 else ""
+            filename = path[len("/files/") :]
             filepath = os.path.join(directory, filename)
             try:
                 with open(filepath, "r") as f:
@@ -54,12 +70,12 @@ def main():
             except Exception:
                 response = b"HTTP/1.1 404 Not Found\r\n\r\n"
         elif method == "POST" and path.startswith("/files/"):
-            if 'content-length' not in headers_dict:
+            if "content-length" not in headers_dict:
                 response = b"HTTP/1.1 400 Bad Request\r\n\r\n"
             else:
-                directory = sys.argv[2]
-                filename = path[len("/files/"):]
-                content_length = int(headers_dict['content-length'])
+                directory = sys.argv[2] if len(sys.argv) > 2 else ""
+                filename = path[len("/files/") :]
+                content_length = int(headers_dict["content-length"])
                 body_content = body[:content_length]
                 filepath = os.path.join(directory, filename)
                 try:
